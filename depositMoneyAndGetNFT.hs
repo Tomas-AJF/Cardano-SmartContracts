@@ -81,6 +81,7 @@ depositAda_ReceiveNFT amt = do
                               logInfo @String $ printf "Amount of deposited lovelace is: %d" amt                                  
 
 
+-- Get datum hash is responsible for receiving UTXO and compare until we found de common token
 getDatumHash   []     _   =  False
 getDatumHash (x:xs) funds 
                          | (findNFT x funds)  = True
@@ -90,7 +91,7 @@ getDatumHash (x:xs) funds
                          
 
 
-
+- Sending NFT from your wallet to the smartcontract you will be alowed to receive your locked ADA.
 --depositNFT_ReceiveADA :: Contract () e T.Text ()                      
 depositNFT_ReceiveADA = do
                          utxos <- utxoAt depositAddress
