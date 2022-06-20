@@ -74,7 +74,8 @@ depositAda_ReceiveNFT amt = do
                                   tokenName      =  TokenName emptyByteString
                                   currSymbol     =  Currency.currencySymbol (oneSCurrency hashOfPubKey tokenName)
                                   nftForDeposit  =  singleton currSymbol tokenName 1 
-                                  tx    =  Constraints.mustPayToTheScript nftForDeposit $ Ada.lovelaceValueOf amt
+                                  tx    =  Constraints.mustPayToTheScript currSymbol $ Ada.lovelaceValueOf amt <>
+                                           Constraints.mustPayToPubKey hashOfPubKey nftForDeposit
                               ledgerTx  <- submitTxConstraints validateDeposit tx
                               void $ awaitTxConfirmed $ getCardanoTxId ledgerTx                              
                               logInfo @String $ printf "Amount of deposited lovelace is: %d" amt                                  
