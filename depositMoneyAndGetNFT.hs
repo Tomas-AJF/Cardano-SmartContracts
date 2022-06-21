@@ -74,36 +74,54 @@ depositAda_ReceiveNFT amt = do
                                   tokenName      =  TokenName emptyByteString
                                   currSymbol     =  Currency.currencySymbol (oneSCurrency hashOfPubKey tokenName)
                                   nftForDeposit  =  singleton currSymbol tokenName 1 
-                                  tx    =  Constraints.mustPayToTheScript currSymbol $ Ada.lovelaceValueOf amt <>
-                                           Constraints.mustPayToPubKey hashOfPubKey nftForDeposit
+                                   tx    =  Constraints.mustPayToTheScript currSymbol $ Ada.lovelaceValueOf amt <>
+                                            Constraints.mustPayToPubKey hashOfPubKey nftForDeposit
                               ledgerTx  <- submitTxConstraints validateDeposit tx
                               void $ awaitTxConfirmed $ getCardanoTxId ledgerTx                              
                               logInfo @String $ printf "Amount of deposited lovelace is: %d" amt                                  
 
 
--- Get datum hash is responsible for receiving UTXO and compare until we found de common token
-getDatumHash   []     _   =  False
-getDatumHash (x:xs) funds 
-                         | (findNFT x funds)  = True
-                         | otherwise          = getDatumHash xs funds
-                         where
-                             findNFT (t:ts) 
-                         
-
-
-- Sending NFT from your wallet to the smartcontract you will be alowed to receive your locked ADA.
 --depositNFT_ReceiveADA :: Contract () e T.Text ()                      
 depositNFT_ReceiveADA = do
-                         utxos <- utxoAt depositAddress
-                         utxosAtMyWallet <- utxoAt ownPaymentPubKeyHash
-                         let
-                            pub_key <- ownPaymentPubKeyHash
-                            outRefs = fst <$> Map.toList utxos
-                            lookups = Constraints.unspentOutputs utxos <> Constraints.otherScript validator  
-                            tx :: TxConstraints Void Void
-                            tx      = mconcat [mustSpendScriptOutput oref $ Redeemer $ pub_key | oref <- outRefs]
-                         
-                         ledgerTx <- submitTxConstraintsWith @Void lookups tx
-                         void $ awaitTxConfirmed $ getCardanoTxId ledgerTx
-                         logInfo @String $ "You have received your lovelaces"
+                         utxo1 <- utxoAt $ ownPaymentPubKeyHash
+                         utxo2 <- utxoAt $ depositAddress
 
+                         listOfValues1 = map snd $ Map.toList $ utxo1
+                         searchFor1    = map  (symbols . _ciTxOutValue) listOfValues1 
+
+                         listOfValues2 = map snd $ Map.toList $ utxo2
+                         searchFor2    = map  (symbols . _ciTxOutValue) listOfValues2 
+                          
+                         myNFTsignature = checkCurrSymbol searchFor1 searchFor2 
+
+                         case myNFTsignature of
+                               Just nftSign  ->  let  
+                                                   outRefs = fst <$> Map.toList utxos2
+                                                   lookups = Constraints.unspentOutputs utxos2 <> Constraints.otherScript validator    
+                                                   tx :: TxConstraints Void Void
+                                                   tx      = mconcat [mustSpendScriptOutput oref $ Redeemer $ nftSign | oref <- outRefs]
+                
+                                                 ledgerTx <- submitTxConstraintsWith @Void lookups tx
+                                                 void $ awaitTxConfirmed $ getCardanoTxId ledgerTx
+                                                 logInfo @String $ "You have received your lovelaces"
+                               
+                               Nothing        -> error "You don't have the NFT for unlocking ADA"
+                         
+                        where 
+                             checkCurrSymbol []  _ = Nothing
+                             checkCurrSymbol (t:ts) (myCurr) 
+                                                           | length findCS > 0 = Just $ head findCS
+                                                           | otherwise         = checkCurrSymbol ts myCurr 
+                               where
+                                   findCS = takeWhile ( == t) myCurr
+
+
+contract :: AsContractError e => Contract () Schema e ()
+contract = selectList [depositNFT_ReceiveADA, depositAda_ReceiveNFT]
+
+endpoints :: AsContractError e => Contract () Schema e ()
+endpoints = contract
+
+mkSchemaDefinitions ''Schema
+
+$(mkKnownCurrencies [])
