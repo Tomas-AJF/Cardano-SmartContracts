@@ -2,35 +2,29 @@
 
 import Text.Printf (printf)
 import Data.Text qualified as T
-import PlutusTx.Prelude
-
 import Prelude qualified as Haskell
-import Ledger.Crypto
-import Ledger.Address
-
-import Data.ByteString.Lazy.UTF8 as BLU 
-import Plutus.Contracts.Currency
-import Ledger.Constraints qualified as Constraints
-
 import Data.Map as Map
-import Control.Monad (void)
 
+import Control.Monad (void)
 import Ledger (Address, ScriptContext)
+import Ledger.Value (Value)
+import Playground.Contract
+
+import Plutus.Contract
 import Ledger.Constraints qualified as Constraints
 import Ledger.Typed.Scripts qualified as Scripts
-import Ledger.Value (Value)
-
-import Playground.Contract
-import Plutus.Contract
-
 import PlutusTx.Prelude hiding (Applicative (..))
-import Plutus.Contracts.Currency
+
+-- import Data.ByteString.Lazy.UTF8 as BLU 
+-- import Plutus.Contracts.Currency
+
+
 
 
 {-# INLINABLE mkValidator #-}
-mkValidator :: Integer -> () -> ScriptContext -> Bool
-mkValidator nft _ _ = traceIfFalse "search for tokens" $ True 
-
+mkValidator :: CurrencySymbol -> CurrencySymbol -> ScriptContext -> Bool
+mkValidator nftDatum nftRedeemer ctx = traceIfFalse "Search for Currency" $ (nftDatum unCurrencySymbol) == (nftRedeemer unCurrencySymbol)
+ 
 
 data Deposit
 instance Scripts.ValidatorTypes Deposit where
@@ -58,13 +52,14 @@ depositAddress :: Ledger.Address
 depositAddress = scriptAddress validator
 
 
-type GiftSchema =
-            Endpoint "depositAda_ReceiveNFT" Integer
-        .\/ Endpoint "depositNFT_ReceiveADA " ()
+type DepositSchema =
+                 BlockchainActions
+            .\/  Endpoint "depositAda_ReceiveNFT" Integer
+            .\/  Endpoint "depositNFT_ReceiveADA " ()
 
 
--- oneSCurrency = mapError (pack . show) (mintContract hashOfPubKey [(tokenName, 1)] :: Contract w s CurrencyError OneShotCurrency)
-oneSCurrency hash tN = mapError (pack . show) (mintContract hash [(tN, 1)] :: Contract w s CurrencyError OneShotCurrency)
+-- mintContract = is not working on testnet
+-- oneSCurrency hash tN = mapError (pack . show) (mintContract hash [(tN, 1)] :: Contract w s CurrencyError OneShotCurrency)
 
 
 --depositAda_ReceiveNFT :: Integer ->  Contract () c T.Text ()
@@ -78,7 +73,7 @@ depositAda_ReceiveNFT amt = do
                                             Constraints.mustPayToPubKey hashOfPubKey nftForDeposit
                               ledgerTx  <- submitTxConstraints validateDeposit tx
                               void $ awaitTxConfirmed $ getCardanoTxId ledgerTx                              
-                              logInfo @String $ printf "Amount of deposited lovelace is: %d" amt                                  
+                              logInfo @Haskell.String $ printf "Amount of deposited lovelace is: %d" amt                                  
 
 
 --depositNFT_ReceiveADA :: Contract () e T.Text ()                      
@@ -105,7 +100,7 @@ depositNFT_ReceiveADA = do
                                                  void $ awaitTxConfirmed $ getCardanoTxId ledgerTx
                                                  logInfo @String $ "You have received your lovelaces"
                                
-                               Nothing        -> error "You don't have the NFT for unlocking ADA"
+                               Nothing        -> traceError "You don't have the NFT for unlocking ADA"
                          
                         where 
                              checkCurrSymbol []  _ = Nothing
@@ -116,12 +111,13 @@ depositNFT_ReceiveADA = do
                                    findCS = takeWhile ( == t) myCurr
 
 
-contract :: AsContractError e => Contract () Schema e ()
+
+contract :: AsContractError e => Contract () DepositSchema e ()
 contract = selectList [depositNFT_ReceiveADA, depositAda_ReceiveNFT]
 
-endpoints :: AsContractError e => Contract () Schema e ()
+endpoints :: AsContractError e => Contract () DepositSchema e ()
 endpoints = contract
 
-mkSchemaDefinitions ''Schema
+mkSchemaDefinitions ''DepositSchema
 
 $(mkKnownCurrencies [])
