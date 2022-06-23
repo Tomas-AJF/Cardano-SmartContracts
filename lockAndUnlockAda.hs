@@ -19,28 +19,22 @@ import           Text.Printf          (printf)
 import           Plutus.Contract qualified as PC
 
 
-
 data LockPKH = LockPKH  { lock :: PaymentPubKeyHash } 
                           deriving (Generic, FromJSON, ToJSON, ToSchema)
 PlutusTx.unstableMakeIsData ''LockPKH
-
 
 data UnlockPKH = UnlockPKH { unlock :: PaymentPubKeyHash } 
                             deriving (Generic, FromJSON, ToJSON, ToSchema)
 PlutusTx.unstableMakeIsData ''UnlockPKH
 
-
 {-# INLINABLE depositValidator  #-}
 depositValidator :: LockPKH -> UnlockPKH -> ScriptContext -> Bool
 depositValidator (LockPKH a) (UnlockPKH b) _ = traceIfFalse "Wrong wallet signature" $ a == b
-
-
 
 data Deposit
 instance Scripts.ValidatorTypes Deposit where
     type instance DatumType Deposit = LockPKH
     type instance RedeemerType Deposit = UnlockPKH
-
 
 typedDepositValidator :: Scripts.TypedValidator Deposit
 typedDepositValidator = Scripts.mkTypedValidator @Deposit
@@ -49,23 +43,16 @@ typedDepositValidator = Scripts.mkTypedValidator @Deposit
                         where
                              wrap = Scripts.wrapValidator @LockPKH @UnlockPKH
 
-
 validator :: Validator
 validator = Scripts.validatorScript typedDepositValidator
-
 
 valHash :: Ledger.ValidatorHash
 valHash = Scripts.validatorHash typedDepositValidator
 
-
 scrAddress :: Ledger.Address
 scrAddress = scriptAddress validator
 
-
-type LockOrUnlock =
-            Endpoint "lockMyAda" Integer
-        .\/ Endpoint "unlockMyAda" ()
-
+type LockOrUnlock =   Endpoint "lockMyAda" Integer  .\/ Endpoint "unlockMyAda" ()
 
 lockMyAda :: AsContractError e => Integer -> Contract w s e ()
 lockMyAda amountOfAda = do
@@ -75,8 +62,6 @@ lockMyAda amountOfAda = do
           ledgerTx <- submitTxConstraints typedDepositValidator tx
           void $ awaitTxConfirmed $ getCardanoTxId ledgerTx
           logInfo @String $ printf "You just locked %d lovelace in the smart-contract" amountOfAda
-
-
 
 unlockMyAda :: forall w s e. AsContractError e => Contract w s e ()
 unlockMyAda = do
@@ -90,8 +75,6 @@ unlockMyAda = do
           ledgerTx <- submitTxConstraintsWith @Void lookups tx
           void $ awaitTxConfirmed $ getCardanoTxId ledgerTx
           logInfo @String $ "Your signature unlocked the ADA in the smart-contract"
-
-
 
 endpoints :: Contract () LockOrUnlock Text ()
 endpoints = awaitPromise (lockMyAda' `select` unlockMyAda') >> endpoints
